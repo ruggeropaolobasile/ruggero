@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ruggero OS</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">AI-assisted operational cockpit</p>
+      <h1>Ruggero OS</h1>
+      <p class="subtitle">Contacts, tasks, opportunities and instant business writing in one lightweight workspace.</p>
+    </div>
+    <div class="topbar-actions">
+      <button id="seedDemoBtn" class="button secondary">Load demo data</button>
+      <button id="resetBtn" class="button ghost">Reset</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel hero-panel">
+      <div class="stats-grid">
+        <article class="stat-card">
+          <span>Contacts</span>
+          <strong id="contactsCount">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>Open tasks</span>
+          <strong id="tasksCount">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>Pipeline value</span>
+          <strong id="pipelineValue">€0</strong>
+        </article>
+        <article class="stat-card">
+          <span>Generated docs</span>
+          <strong id="docsCount">0</strong>
+        </article>
+      </div>
+    </section>
+
+    <section class="grid two-col">
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Contacts</h2>
+          <p>Small CRM for real work.</p>
+        </div>
+        <form id="contactForm" class="stack">
+          <input name="name" placeholder="Name" required />
+          <input name="email" type="email" placeholder="Email" required />
+          <input name="phone" placeholder="Phone" />
+          <input name="tag" placeholder="Tag / niche" />
+          <button class="button primary" type="submit">Add contact</button>
+        </form>
+        <div id="contactsList" class="list"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Tasks</h2>
+          <p>Focus on the next concrete move.</p>
+        </div>
+        <form id="taskForm" class="stack">
+          <input name="title" placeholder="Task title" required />
+          <select name="priority">
+            <option value="Low">Low</option>
+            <option value="Medium" selected>Medium</option>
+            <option value="High">High</option>
+          </select>
+          <input name="deadline" type="date" />
+          <button class="button primary" type="submit">Add task</button>
+        </form>
+        <div id="tasksList" class="list"></div>
+      </article>
+    </section>
+
+    <section class="grid two-col">
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Opportunities</h2>
+          <p>Track prospects and deal value.</p>
+        </div>
+        <form id="opportunityForm" class="stack">
+          <input name="name" placeholder="Prospect / opportunity" required />
+          <input name="value" type="number" min="0" step="1" placeholder="Estimated value" required />
+          <select name="status">
+            <option value="Lead">Lead</option>
+            <option value="Proposal">Proposal</option>
+            <option value="Negotiation">Negotiation</option>
+            <option value="Won">Won</option>
+          </select>
+          <button class="button primary" type="submit">Add opportunity</button>
+        </form>
+        <div id="opportunitiesList" class="list"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Document generator</h2>
+          <p>Create reusable operational texts in seconds.</p>
+        </div>
+        <form id="docForm" class="stack">
+          <select name="template">
+            <option value="proposal">Quick proposal</option>
+            <option value="followup">Follow-up email</option>
+            <option value="meeting">Meeting summary</option>
+            <option value="post">Social post</option>
+          </select>
+          <input name="subject" placeholder="Subject / client / project" required />
+          <textarea name="details" rows="5" placeholder="Context, pain point, next steps"></textarea>
+          <button class="button primary" type="submit">Generate</button>
+        </form>
+        <textarea id="generatedOutput" class="output" rows="14" placeholder="Generated content will appear here"></textarea>
+        <div class="inline-actions">
+          <button id="copyOutputBtn" class="button secondary" type="button">Copy output</button>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
