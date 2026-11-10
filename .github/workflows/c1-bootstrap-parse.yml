@@ -108,3 +108,30 @@ jobs:
             Remove-Item -LiteralPath $testRoot -Recurse -Force -ErrorAction SilentlyContinue
           }
           Write-Host 'C1-LOCAL-SYNC-BOOTSTRAP-PARSE-OK'
+      - name: Integration test - failed run must publish full log to Drive
+        shell: powershell
+        run: |
+          $testDrive = Join-Path $env:TEMP ('capagross-failure-' + $PID + '\My Drive\MUSICA - Production')
+          New-Item -ItemType Directory -Path $testDrive -Force | Out-Null
+          $env:CAPAGROSS_TEST_DRIVE = $testDrive
+          $source = Get-Content c.ps1 -Raw
+          $needleRoot = '    $syncDirs = @(Get-SyncRoots)'
+          $needleFail = '    Stage-SyncedFiles $syncDirs'
+          if (-not $source.Contains($needleRoot) -or -not $source.Contains($needleFail)) { throw 'Integration test anchors moved' }
+          $patched = $source.Replace($needleRoot,'    $syncDirs = @($env:CAPAGROSS_TEST_DRIVE)')
+          $patched = $patched.Replace($needleFail, "    throw 'EXPECTED_TEST_FAILURE'")
+          $simulated = Join-Path $env:TEMP ('capagross-simulated-' + $PID + '.ps1')
+          [System.IO.File]::WriteAllText($simulated, $patched)
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $simulated
+          $childExit = $LASTEXITCODE
+          if ($childExit -eq 0) { throw 'Injected failure returned exit 0' }
+          $syncDir = Join-Path $testDrive 'Capagross-RX18-Logs'
+          $latestLog = Join-Path $syncDir 'Capagross-RX18-LATEST.log'
+          $latestJson = Join-Path $syncDir 'Capagross-RX18-LATEST.json'
+          if (-not (Test-Path $latestLog -PathType Leaf)) { throw 'Failed run did not sync full log' }
+          if (-not (Test-Path $latestJson -PathType Leaf)) { throw 'Failed run did not sync status JSON' }
+          $text = Get-Content -LiteralPath $latestLog -Raw
+          if ($text -notmatch 'EXPECTED_TEST_FAILURE' -or $text -notmatch 'Status: FAILED') { throw 'Full log lacks failure details' }
+          $status = Get-Content -LiteralPath $latestJson -Raw | ConvertFrom-Json
+          if ($status.status -ne 'failed' -or $status.phase -ne 'stage_audio') { throw 'Failed status JSON invalid' }
+          Write-Host "CAPAGROSS-END-TO-END-FAILURE-LOG-OK bytes=$((Get-Item $latestLog).Length)"
