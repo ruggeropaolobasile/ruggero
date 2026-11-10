@@ -104,13 +104,87 @@ function Stage-SyncedFiles([string[]]$dirs) {
     }
 }
 
+# Keep a local full log and publish it after transcript closes.
+$runStartedAt = Get-Date
+$runId = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + $PID
+$fullLog = Join-Path $logs ("Capagross-RX18-FULL-" + $runId + ".log")
+$statusFile = Join-Path $logs ("Capagross-RX18-STATUS-" + $runId + ".json")
+$phase = 'bootstrap'
+$resultCode = 1
+$errorDetail = $null
+$syncTargets = @()
 $transcript = $false
+
+function Get-SyncedLogDirectories([string[]]$availableDirs) {
+    # Personal Drive first; private Dropbox root as fallback. No sharedrx18.
+    $drive = @($availableDirs | Where-Object {
+        ($_ -match '(^|[\\/])(MUSICA - Production)$') -and
+        ($_ -match '(^|[\\/])(My Drive|Il mio Drive|Google Drive)([\\/]|$)')
+    } | Select-Object -Unique)
+    $dropbox = @($availableDirs | Where-Object {
+        ($_ -match '(^|[\\/])Dropbox$')
+    } | Select-Object -Unique)
+    foreach ($infoFile in @((Join-Path $env:LOCALAPPDATA 'Dropbox\info.json'), (Join-Path $env:APPDATA 'Dropbox\info.json'))) {
+        try {
+            if (Test-Path -LiteralPath $infoFile -PathType Leaf -ErrorAction Stop) {
+                $cfg = Get-Content -LiteralPath $infoFile -Raw -ErrorAction Stop | ConvertFrom-Json
+                foreach ($kind in @('personal', 'business')) {
+                    $property = $cfg.PSObject.Properties[$kind]
+                    if ($property -and $property.Value.path) {
+                        $candidate = [string]$property.Value.path
+                        if ($availableDirs -contains $candidate) { $dropbox += $candidate }
+                    }
+                }
+            }
+        } catch {
+            Write-Warning ('Dropbox sync root unavailable: ' + $_.Exception.Message)
+        }
+    }
+    foreach ($base in @($drive) + @($dropbox | Select-Object -Unique)) {
+        try {
+            $candidate = Join-Path $base 'Capagross-RX18-Logs'
+            if (-not (Test-Path -LiteralPath $candidate -PathType Container -ErrorAction Stop)) {
+                New-Item -ItemType Directory -Path $candidate -Force -ErrorAction Stop | Out-Null
+            }
+            $probe = Join-Path $candidate ("write-test-" + $PID + ".tmp")
+            [System.IO.File]::WriteAllText($probe, 'test')
+            Remove-Item -LiteralPath $probe -Force -ErrorAction Stop
+            Write-Output $candidate
+        } catch {
+            Write-Warning ('Cartella sync non scrivibile: ' + $base + ' -- ' + $_.Exception.Message)
+        }
+    }
+}
+function Publish-RunLogs([string]$sourceLog,[string]$sourceStatus,[string[]]$targets) {
+    $published = @()
+    foreach ($target in $targets) {
+        try {
+            $logDest = Join-Path $target 'Capagross-RX18-LATEST.log'
+            $statusDest = Join-Path $target 'Capagross-RX18-LATEST.json'
+            Copy-Item -LiteralPath $sourceLog -Destination $logDest -Force -ErrorAction Stop
+            Copy-Item -LiteralPath $sourceStatus -Destination $statusDest -Force -ErrorAction Stop
+            Copy-Item -LiteralPath $sourceLog -Destination (Join-Path $target ([IO.Path]::GetFileName($sourceLog))) -Force -ErrorAction Stop
+            Write-Host ('LOG_SYNC_OK: ' + $logDest) -ForegroundColor Green
+            $published += $logDest
+        } catch {
+            Write-Warning ('LOG_SYNC_FAILED: ' + $target + ' -- ' + $_.Exception.Message)
+        }
+    }
+    return @($published)
+}
 try {
     Start-Transcript -Path $log -Force | Out-Null
     $transcript = $true
     Write-Host ("BOOTSTRAP RX18 - log: " + $log) -ForegroundColor Cyan
+    $phase = 'local_sync_discovery'
     $syncDirs = @(Get-SyncRoots)
     Write-Host ("Cartelle Drive/Dropbox rilevate: " + $syncDirs.Count) -ForegroundColor Cyan
+    $syncTargets = @(Get-SyncedLogDirectories $syncDirs)
+    Write-Host ("Destinazioni log sincronizzate: " + $syncTargets.Count) -ForegroundColor Cyan
+    if ($syncTargets.Count -eq 0) {
+        Write-Warning 'Nessuna cartella Drive/Dropbox scrivibile: log conservato in AppData.'
+    }
+    $phase = 'stage_audio'
     Stage-SyncedFiles $syncDirs
     $verified = $false
     if (Test-Path $script -PathType Leaf) {
@@ -154,13 +228,68 @@ try {
         throw 'Hash SHA-256 script non corrispondente: esecuzione bloccata.'
     }
     Write-Host 'Script Drive autenticato e verificato. Eseguo...' -ForegroundColor Green
+    $phase = 'audio_capture'
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script
     if ($LASTEXITCODE -ne 0) { throw ("Registrazione fallita (exit " + $LASTEXITCODE + "); consultare i log sotto " + $logs) }
+    $resultCode = 0
+    $phase = 'completed'
     Write-Host 'Registrazione conclusa: consultare il MP3 e il manifest nella cartella Musica\Capagross.' -ForegroundColor Green
 } catch {
-    Write-Host ("ERRORE: " + $_.Exception.Message) -ForegroundColor Red
+    $errorDetail = ($_ | Format-List * -Force | Out-String)
+    Write-Host ("ERRORE [" + $phase + "]: " + $_.Exception.Message) -ForegroundColor Red
+    Write-Host $errorDetail -ForegroundColor Red
     Write-Host ("Log di bootstrap: " + $log) -ForegroundColor Yellow
     throw
 } finally {
-    if ($transcript) { Stop-Transcript | Out-Null }
+    if ($transcript) { try { Stop-Transcript | Out-Null } catch { } }
+    try {
+        $parts = New-Object 'System.Collections.Generic.List[string]'
+        $parts.Add(('CAPAGROSS RX18 COMPLETE EXECUTION / RUN ' + $runId))
+        $parts.Add(('Started: ' + $runStartedAt.ToString('o')))
+        $parts.Add(('Completed: ' + (Get-Date).ToString('o')))
+        $parts.Add(('Status: ' + $(if ($resultCode -eq 0) { 'SUCCESS' } else { 'FAILED' })))
+        $parts.Add(('Phase: ' + $phase))
+        $parts.Add(('Exit code: ' + $resultCode))
+        $parts.Add(('Bootstrap transcript: ' + $log))
+        $parts.Add('===== BOOTSTRAP OUTPUT =====')
+        if (Test-Path -LiteralPath $log -PathType Leaf) {
+            $parts.Add([System.IO.File]::ReadAllText($log))
+        } else { $parts.Add('Bootstrap transcript unavailable') }
+        $children = @(Get-ChildItem -LiteralPath $logs -Filter 'Capagross-RX18-*.log' -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -ge $runStartedAt.AddSeconds(-3) -and $_.FullName -ne $fullLog } |
+            Sort-Object LastWriteTime)
+        foreach ($child in $children) {
+            $parts.Add(('===== CHILD TRANSCRIPT ' + $child.Name + ' ====='))
+            try { $parts.Add([System.IO.File]::ReadAllText($child.FullName)) }
+            catch { $parts.Add(('Unable to read child log: ' + $_.Exception.Message)) }
+        }
+        if ($errorDetail) {
+            $parts.Add('===== FULL ERROR RECORD =====')
+            $parts.Add($errorDetail)
+        }
+        [System.IO.File]::WriteAllText($fullLog, [string]::Join([Environment]::NewLine, $parts.ToArray()), [System.Text.Encoding]::UTF8)
+        $status = [ordered]@{
+            runId = $runId
+            status = $(if ($resultCode -eq 0) { 'success' } else { 'failed' })
+            exitCode = $resultCode
+            phase = $phase
+            startedAt = $runStartedAt.ToString('o')
+            completedAt = (Get-Date).ToString('o')
+            fullLog = $fullLog
+            childLogCount = $children.Count
+            syncedLogTargets = $syncTargets
+            error = $(if ($errorDetail) { ($errorDetail.Split([char]10) | Select-Object -First 3) -join ' | ' } else { $null })
+        }
+        $status | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $statusFile -Encoding UTF8
+        $published = @(Publish-RunLogs -sourceLog $fullLog -sourceStatus $statusFile -targets $syncTargets)
+        if ($published.Count -eq 0) {
+            Write-Warning ('Nessun log condiviso: log completo locale in ' + $fullLog)
+        } else {
+            Write-Host ('LOG_COMPLETO_SINCRONIZZATO: ' + ($published -join ', ')) -ForegroundColor Green
+        }
+        Write-Host ('LOG_COMPLETO_LOCALE: ' + $fullLog)
+    } catch {
+        Write-Warning ('Impossibile finalizzare il bundle log: ' + $_.Exception.Message)
+        Write-Warning ('Transcript base conservato in: ' + $log)
+    }
 }
