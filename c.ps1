@@ -209,10 +209,10 @@ try {
     }
     # Download approved, SHA-pinned CDP orchestrator (no user prompt).
     $phase = 'cdp_orchestrator_setup'
-    $autoUrl = 'https://raw.githubusercontent.com/ruggeropaolobasile/ruggero/994e2d87375d31ad5aa27af53647fa173b78778e/auto.ps1'
+    $autoUrl = 'https://raw.githubusercontent.com/ruggeropaolobasile/ruggero/e51e8c65c95d696b8c800613b1e2d3ef68b513e7/auto.ps1'
     $autoPath = Join-Path $root 'Capagross-AutoCapture-CDP.ps1'
     $autoTemp = Join-Path $root 'auto.ps1.partial'
-    $autoHash = 'E99C733BF57F4A16725DC0925551645EAF538D49DBF402B5386BEB8DB77DF96B'
+    $autoHash = '4D506D6E2B98268F1B6982AE92FEC4AE8E83220C16E5FC4BC3CB43901210579B'
     if (-not (Test-VerifiedFile $autoPath $autoHash 9000 11000)) {
         Invoke-WebRequest -Uri $autoUrl -UseBasicParsing -TimeoutSec 40 -OutFile $autoTemp -ErrorAction Stop
         if (-not (Test-VerifiedFile $autoTemp $autoHash 9000 11000)) {
