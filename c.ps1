@@ -238,9 +238,22 @@ try {
         throw 'RX18_AUDIO_DOCTOR_NOT_READY'
     }
     Write-Host 'CDP_AUTOMATION: capture starts first; Suno PLAY happens without manual action.' -ForegroundColor Green
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $autoPath -RecorderExe $exe -LogsDirectory $logs -OutputDirectory $outDir
-    if ($LASTEXITCODE -ne 0) {
-        throw ('CDP_AUTONOMOUS_RECORDING_FAILED exit=' + $LASTEXITCODE)
+    # Capture ALL stdout and stderr from the nested PowerShell process.
+    # Parent Start-Transcript alone may miss child console output or errors.
+    $cdpLog = Join-Path $logs ('Capagross-RX18-CDP-' + $runId + '.log')
+    $oldPreference = $ErrorActionPreference
+    $childExitCode = 1
+    try {
+        $ErrorActionPreference = 'Continue'
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $autoPath -RecorderExe $exe -LogsDirectory $logs -OutputDirectory $outDir 2>&1 |
+            Tee-Object -FilePath $cdpLog | Out-Host
+        $childExitCode = [int]$LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $oldPreference
+    }
+    Write-Host ('CDP_CHILD_EXIT=' + $childExitCode + '; CDP_CHILD_LOG=' + $cdpLog)
+    if ($childExitCode -ne 0) {
+        throw ('CDP_AUTONOMOUS_RECORDING_FAILED exit=' + $childExitCode + '; child_log=' + $cdpLog)
     }
     $resultCode = 0
     $phase = 'completed'
