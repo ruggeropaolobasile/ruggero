@@ -72,4 +72,39 @@ jobs:
           Remove-Item Function:\Test-Path -Force
           if ($null -eq $offlineRoots) { throw 'Offline paths abort the root discovery' }
           Write-Host "DRIVE-OFFLINE-REGRESSION-PASS roots=$($offlineRoots.Count)"
+          foreach ($functionName in @('Get-SyncedLogDirectories', 'Publish-RunLogs')) {
+            $functionAst = $ast.FindAll({
+              param($node)
+              $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                $node.Name -eq $functionName
+            }, $true) | Select-Object -First 1
+            if (-not $functionAst) { throw "Function not found: $functionName" }
+            . ([scriptblock]::Create($functionAst.Extent.Text))
+          }
+          $testRoot = Join-Path $env:TEMP ('CapagrossLogSyncTest-' + $PID)
+          $testDrive = Join-Path $testRoot 'My Drive\MUSICA - Production'
+          $testShared = Join-Path $testRoot 'Dropbox\sharedrx18'
+          New-Item -ItemType Directory -Path $testDrive,$testShared -Force | Out-Null
+          try {
+            $targets = @(Get-SyncedLogDirectories @($testDrive))
+            if ($targets.Count -ne 1) { throw "Expected one private Drive target, got $($targets.Count)" }
+            $sharedTargets = @(Get-SyncedLogDirectories @($testShared))
+            if ($sharedTargets.Count -ne 0) { throw 'Refusing shared Dropbox path regression failed' }
+            $sourceLog = Join-Path $testRoot 'full.log'
+            $sourceStatus = Join-Path $testRoot 'status.json'
+            $logText = ('BOOTSTRAP RUN' + [Environment]::NewLine + 'CAPTURE FAILED' + [Environment]::NewLine + 'ERROR: test audio device missing')
+            Set-Content -LiteralPath $sourceLog -Value $logText -Encoding UTF8
+            Set-Content -LiteralPath $sourceStatus -Value '{"status":"failed","phase":"audio_capture"}' -Encoding UTF8
+            $published = @(Publish-RunLogs -sourceLog $sourceLog -sourceStatus $sourceStatus -targets $targets)
+            if ($published.Count -ne 1) { throw 'Log was not published to Drive sync folder' }
+            $latest = Join-Path $targets[0] 'Capagross-RX18-LATEST.log'
+            $latestStatus = Join-Path $targets[0] 'Capagross-RX18-LATEST.json'
+            if (-not (Test-Path -LiteralPath $latest -PathType Leaf)) { throw 'Latest log missing' }
+            if (-not (Test-Path -LiteralPath $latestStatus -PathType Leaf)) { throw 'Latest status missing' }
+            if ((Get-Content -LiteralPath $latest -Raw) -notmatch 'ERROR: test audio device missing') { throw 'Full error lost during sync' }
+            if ((Get-Content -LiteralPath $latestStatus -Raw) -notmatch '"failed"') { throw 'Failure status lost during sync' }
+            Write-Host 'CAPAGROSS-LOG-SYNC-TEST-PASS'
+          } finally {
+            Remove-Item -LiteralPath $testRoot -Recurse -Force -ErrorAction SilentlyContinue
+          }
           Write-Host 'C1-LOCAL-SYNC-BOOTSTRAP-PARSE-OK'
