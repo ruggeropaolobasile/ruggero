@@ -24,15 +24,15 @@ function Test-VerifiedFile([string] $path, [string] $hash, [long] $min, [long] $
 }
 function Get-SyncRoots {
     # Known Drive Desktop (virtual or mirrored) and Dropbox locations; no unbounded disk scans.
-    $home = $env:USERPROFILE
+    $userProfileDir = $env:USERPROFILE
     $roots = New-Object 'System.Collections.Generic.List[string]'
     foreach ($path in @(
-        (Join-Path $home 'Dropbox'),
-        (Join-Path $home 'Google Drive'),
-        (Join-Path $home 'My Drive'),
-        (Join-Path $home 'Il mio Drive'),
-        (Join-Path $home 'Downloads'),
-        (Join-Path $home 'Music')
+        (Join-Path $userProfileDir 'Dropbox'),
+        (Join-Path $userProfileDir 'Google Drive'),
+        (Join-Path $userProfileDir 'My Drive'),
+        (Join-Path $userProfileDir 'Il mio Drive'),
+        (Join-Path $userProfileDir 'Downloads'),
+        (Join-Path $userProfileDir 'Music')
     )) { $roots.Add($path) }
     foreach ($info in @((Join-Path $env:LOCALAPPDATA 'Dropbox\info.json'), (Join-Path $env:APPDATA 'Dropbox\info.json'))) {
         if (Test-Path -LiteralPath $info -PathType Leaf) {
