@@ -186,46 +186,26 @@ try {
     }
     $phase = 'stage_audio'
     Stage-SyncedFiles $syncDirs
-    $verified = $false
-    if (Test-Path $script -PathType Leaf) {
-        $verified = ((Get-FileHash -LiteralPath $script -Algorithm SHA256).Hash -eq $expected)
-    }
-    if (-not $verified) {
+    # The private Drive script is no longer needed: invoke the bundled recorder EXE directly.
+    # Prefer a verified ZIP staged from local Drive/Dropbox/Downloads.
+    $phase = 'verify_recorder_package'
+    if (-not (Test-VerifiedFile $bundleDest $bundleHash 45000000 50000000)) {
+        $zipUrl = 'https://drive.google.com/uc?export=download&confirm=t&id=1CpeXX10j9GojCfGVG91mxfp2XqH9ZSVB'
+        $zipTemp = Join-Path $root 'Capagross-recorder-download.partial'
         try {
-            Invoke-WebRequest -Uri $docDownload -UseBasicParsing -OutFile $part -TimeoutSec 35 -ErrorAction Stop
-            if ((Get-FileHash -LiteralPath $part -Algorithm SHA256).Hash -eq $expected) {
-                Move-Item -LiteralPath $part -Destination $script -Force
-                $verified = $true
+            Write-Host 'Recupero il registratore verificato da Google Drive...' -ForegroundColor Cyan
+            Invoke-WebRequest -Uri $zipUrl -UseBasicParsing -OutFile $zipTemp -TimeoutSec 180 -ErrorAction Stop
+            if (Test-VerifiedFile $zipTemp $bundleHash 45000000 50000000) {
+                Move-Item -LiteralPath $zipTemp -Destination $bundleDest -Force
             }
         } catch {
-            Write-Host 'Drive richiede il login; utilizzo il browser gia autenticato.' -ForegroundColor Yellow
+            Write-Warning ('Download cloud non disponibile; nessun file non verificato eseguito: ' + $_.Exception.Message)
         } finally {
-            if (Test-Path -LiteralPath $part) { Remove-Item -LiteralPath $part -Force }
+            if (Test-Path -LiteralPath $zipTemp) { Remove-Item -LiteralPath $zipTemp -Force }
         }
     }
-    if (-not $verified) {
-        Write-Host 'Apro Drive nel browser per scaricare lo script dal Drive locale...' -ForegroundColor Cyan
-        Start-Process $docDownload
-        $deadline = (Get-Date).AddMinutes(3)
-        while ((Get-Date) -lt $deadline -and -not $verified) {
-            $candidates = @(Get-ChildItem -LiteralPath $downloads -File -Filter '*.txt' -ErrorAction SilentlyContinue |
-                Where-Object { $_.Length -gt 8000 -and $_.Length -lt 15000 -and $_.LastWriteTime -gt (Get-Date).AddMinutes(-10) } |
-                Sort-Object LastWriteTime -Descending)
-            foreach ($candidate in $candidates) {
-                if ((Get-FileHash -LiteralPath $candidate.FullName -Algorithm SHA256).Hash -eq $expected) {
-                    Copy-Item -LiteralPath $candidate.FullName -Destination $script -Force
-                    $verified = $true
-                    break
-                }
-            }
-            if (-not $verified) { Start-Sleep -Seconds 3 }
-        }
-    }
-    if (-not $verified -or -not (Test-Path $script -PathType Leaf)) {
-        throw 'Impossibile scaricare lo script privato da Drive. Controllare il browser o il login.'
-    }
-    if ((Get-FileHash -LiteralPath $script -Algorithm SHA256).Hash -ne $expected) {
-        throw 'Hash SHA-256 script non corrispondente: esecuzione bloccata.'
+    if (-not (Test-VerifiedFile $bundleDest $bundleHash 45000000 50000000)) {
+        throw 'RECORDER_PACKAGE_NOT_AVAILABLE_IN_LOCAL_SYNC_OR_DRIVE'
     }
     # Download approved, SHA-pinned CDP orchestrator (no user prompt).
     $phase = 'cdp_orchestrator_setup'
