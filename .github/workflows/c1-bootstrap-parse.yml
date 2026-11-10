@@ -33,4 +33,29 @@ jobs:
           foreach ($feature in @('Stage-SyncedFiles', 'Get-SyncRoots', 'Test-VerifiedFile', 'Dropbox', 'MUSICA - Production')) {
             if (-not $sourceText.Contains($feature)) { throw "Missing feature: $feature" }
           }
+          # Regression: PowerShell treats $home as the read-only automatic $HOME.
+          $forbidden = @('HOME', 'HOST', 'PID', 'PSVERSIONTABLE', 'NULL', 'TRUE', 'FALSE')
+          $assignments = $ast.FindAll({
+            param($node)
+            $node -is [System.Management.Automation.Language.AssignmentStatementAst]
+          }, $true)
+          foreach ($assignment in $assignments) {
+            $lhs = $assignment.Left
+            if ($lhs -is [System.Management.Automation.Language.VariableExpressionAst]) {
+              $name = $lhs.VariablePath.UserPath.ToUpperInvariant()
+              if ($forbidden -contains $name) {
+                throw "Attempted assignment to readonly automatic variable `$name at line $($lhs.Extent.StartLineNumber)"
+              }
+            }
+          }
+          # Execute only the safe, bounded local root-discovery function, not the recording main.
+          $functionNode = $ast.FindAll({
+            param($node)
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+              $node.Name -eq 'Get-SyncRoots'
+          }, $true) | Select-Object -First 1
+          if (-not $functionNode) { throw 'Get-SyncRoots function missing' }
+          . ([scriptblock]::Create($functionNode.Extent.Text))
+          $roots = @(Get-SyncRoots)
+          Write-Host "GET-SYNCROOTS-RUNTIME-OK roots=$($roots.Count)"
           Write-Host 'C1-LOCAL-SYNC-BOOTSTRAP-PARSE-OK'
