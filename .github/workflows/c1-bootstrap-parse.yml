@@ -1,0 +1,36 @@
+name: Capagross RX18 local-sync bootstrap validation
+
+on:
+  push:
+    branches: [c1]
+    paths:
+      - c.ps1
+      - .github/workflows/c1-bootstrap-parse.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parse-on-windows:
+    runs-on: windows-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse PowerShell 5.1 and verify local-sync entrypoints
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          $source = (Resolve-Path 'c.ps1').Path
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile($source, [ref]$tokens, [ref]$errors)
+          if ($errors.Count) {
+            foreach ($e in $errors) { Write-Error $e.Message }
+            exit 1
+          }
+          if (-not $ast) { throw 'No PowerShell AST' }
+          $sourceText = Get-Content -LiteralPath $source -Raw
+          foreach ($feature in @('Stage-SyncedFiles', 'Get-SyncRoots', 'Test-VerifiedFile', 'Dropbox', 'MUSICA - Production')) {
+            if (-not $sourceText.Contains($feature)) { throw "Missing feature: $feature" }
+          }
+          Write-Host 'C1-LOCAL-SYNC-BOOTSTRAP-PARSE-OK'
