@@ -69,6 +69,7 @@ jobs:
             return (Microsoft.PowerShell.Management\Test-Path -LiteralPath $LiteralPath -PathType $PathType -ErrorAction SilentlyContinue)
           }
           $offlineRoots = @(Get-SyncRoots)
+          Remove-Item Function:\Test-Path -Force
           if ($null -eq $offlineRoots) { throw 'Offline paths abort the root discovery' }
           Write-Host "DRIVE-OFFLINE-REGRESSION-PASS roots=$($offlineRoots.Count)"
           Write-Host 'C1-LOCAL-SYNC-BOOTSTRAP-PARSE-OK'
