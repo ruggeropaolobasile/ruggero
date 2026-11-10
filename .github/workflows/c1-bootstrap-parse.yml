@@ -5,6 +5,7 @@ on:
     branches: [c1]
     paths:
       - c.ps1
+      - auto.ps1
       - .github/workflows/c1-bootstrap-parse.yml
   workflow_dispatch:
 
@@ -108,6 +109,34 @@ jobs:
             Remove-Item -LiteralPath $testRoot -Recurse -Force -ErrorAction SilentlyContinue
           }
           Write-Host 'C1-LOCAL-SYNC-BOOTSTRAP-PARSE-OK'
+      - name: Validate unattended CDP orchestrator (PowerShell 5.1)
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'auto.ps1').Path, [ref]$tokens, [ref]$errors
+          )
+          if ($errors.Count -gt 0) {
+            foreach ($e in $errors) { Write-Error $e.Message }
+            exit 1
+          }
+          if (-not $ast) { throw 'CDP helper source AST missing' }
+          $source = Get-Content -LiteralPath 'auto.ps1' -Raw
+          foreach ($required in @(
+            '127.0.0.1:9222',
+            '133f9e23-e0f3-4acf-b95b-934c37cb125c',
+            'WASAPI_CAPTURE_READY',
+            'Input.dispatchMouseEvent',
+            'AUDIO_CAPTURE_EXIT_',
+            'CAPAGROSS_MP3_CREATED'
+          )) {
+            if (-not $source.Contains($required)) { throw ('CDP helper missing required guard: ' + $required) }
+          }
+          $bootstrap = Get-Content -LiteralPath 'c.ps1' -Raw
+          if (-not $bootstrap.Contains('AUTOCAPTURE_SCRIPT_SHA256_MISMATCH')) { throw 'Unverified helper download' }
+          if (-not $bootstrap.Contains('CDP_AUTOMATION: capture starts first')) { throw 'Autonomous step not active' }
+          Write-Host 'CAPAGROSS-CDP-AUTO-PARSE-OK'
       - name: Integration test - failed run must publish full log to Drive
         shell: powershell
         run: |
