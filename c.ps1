@@ -57,8 +57,18 @@ function Get-SyncRoots {
             $folder = if ($sub) { Join-Path $rootPath $sub } else { $rootPath }
             if (-not $folder -or $seen.ContainsKey($folder)) { continue }
             $seen[$folder] = $true
-            if (Test-Path -LiteralPath $folder -PathType Container -ErrorAction SilentlyContinue) {
-                Write-Output $folder
+            # Google Drive virtual and offline Dropbox roots can raise IOException even during Test-Path.
+            # A missing/unreachable sync folder is optional: continue to the next candidate.
+            try {
+                if (Test-Path -LiteralPath $folder -PathType Container -ErrorAction Stop) {
+                    Write-Output $folder
+                }
+            } catch [System.IO.IOException] {
+                Write-Warning ('Cartella sincronizzata non accessibile, salto: ' + $folder)
+                continue
+            } catch {
+                Write-Warning ('Percorso sincronizzato non disponibile, salto: ' + $folder)
+                continue
             }
         }
     }
