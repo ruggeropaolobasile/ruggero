@@ -2,7 +2,7 @@
 # Never accepts arbitrary commands, remote hosts, or non-owned song URLs.
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory=$true)][string]$CaptureScript,
+    [Parameter(Mandatory=$true)][string]$RecorderExe,
     [Parameter(Mandatory=$true)][string]$LogsDirectory,
     [Parameter(Mandatory=$true)][string]$OutputDirectory
 )
@@ -84,14 +84,12 @@ $readPlayback = @'
 })()
 '@
 
-if (-not (Test-Path -LiteralPath $CaptureScript -PathType Leaf)) { throw 'CAPTURE_SCRIPT_MISSING' }
+if (-not (Test-Path -LiteralPath $RecorderExe -PathType Leaf)) { throw 'RECORDER_EXE_MISSING' }
 if (-not (Test-Path -LiteralPath $LogsDirectory -PathType Container)) { throw 'LOG_DIRECTORY_MISSING' }
 if (-not (Test-Path -LiteralPath $OutputDirectory -PathType Container)) { New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null }
 $runId = Get-Date -Format 'yyyyMMdd-HHmmss'
-$stdinPath=Join-Path $LogsDirectory ('cdp-stdin-'+$runId+'.txt')
 $stdoutPath=Join-Path $LogsDirectory ('cdp-stdout-'+$runId+'.log')
 $stderrPath=Join-Path $LogsDirectory ('cdp-stderr-'+$runId+'.log')
-Set-Content -LiteralPath $stdinPath -Value '' -Encoding ASCII
 # Pre-open the exact song while not recording, avoiding loading delays and wrong tabs.
 Start-Process $songUrl
 $tabDeadline=(Get-Date).AddSeconds(35)
@@ -106,8 +104,9 @@ while ((Get-Date) -lt $tabDeadline) {
 if (-not $tabReady) { throw 'CDP_SUNO_PAGE_NOT_READY; recording not started' }
 Write-Host 'CDP_SUNO_TAB_READY'
 $start=Get-Date
-$arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$CaptureScript+'"'
-$proc=Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $arguments -PassThru -RedirectStandardInput $stdinPath -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+$audioName='Capagross_Take2_C1_'+$runId
+$arguments='capture --seconds 370 --start-delay 0 --root "'+$OutputDirectory+'" --name '+$audioName+' --record-own-audio'
+$proc=Start-Process -FilePath $RecorderExe -ArgumentList $arguments -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
 Write-Host ('AUTOMATION_CAPTURE_CHILD_STARTED pid='+$proc.Id)
 try {
     $captureReady=$false
@@ -130,11 +129,19 @@ try {
     Write-Host ('CDP_AUDIO_STATE: '+($playback|ConvertTo-Json -Compress))
     if (-not ($playback.playing -or $playback.pauseControl)) { throw 'PLAYBACK_NOT_CONFIRMED' }
     if (-not $proc.WaitForExit(430000)) { throw 'AUDIO_CAPTURE_TIMEOUT' }
-    if ($proc.ExitCode -ne 0) { throw ('AUDIO_CAPTURE_EXIT_'+$proc.ExitCode) }
-    $mp3s=@(Get-ChildItem -LiteralPath $OutputDirectory -Filter 'Capagross_Take2_C1_*.mp3' -File |
-        Where-Object { $_.LastWriteTime -ge $start })
-    if ($mp3s.Count -eq 0) { throw 'MP3_NOT_GENERATED' }
-    Write-Host ('CAPAGROSS_MP3_CREATED: '+$mp3s[-1].FullName)
+    $mp3=Join-Path $OutputDirectory ($audioName+'.mp3')
+    $manifestPath=Join-Path $OutputDirectory ($audioName+'.json')
+    if (-not (Test-Path -LiteralPath $mp3 -PathType Leaf)) { throw ('MP3_NOT_GENERATED: process exit='+$proc.ExitCode) }
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw 'MP3_MANIFEST_NOT_GENERATED' }
+    $manifest=Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $actualHash=(Get-FileHash -LiteralPath $mp3 -Algorithm SHA256).Hash
+    if (-not $manifest.ok -or $manifest.duration_seconds -lt 350 -or $manifest.duration_seconds -gt 385 -or
+        $manifest.rms -lt 0.003 -or $manifest.bytes -lt 1000000 -or $actualHash -ne $manifest.sha256) {
+        throw 'MP3_VALIDATION_FAILED'
+    }
+    if ($null -ne $proc.ExitCode -and $proc.ExitCode -ne 0) { throw ('AUDIO_CAPTURE_EXIT_'+$proc.ExitCode) }
+    Write-Host ('CAPAGROSS_MP3_CREATED: '+$mp3)
+    Write-Host ('CAPAGROSS_MP3_SHA256: '+$actualHash)
 } finally {
     $proc.Refresh()
     if (-not $proc.HasExited) { try { $proc.Kill() } catch {} }
