@@ -227,10 +227,26 @@ try {
     if ((Get-FileHash -LiteralPath $script -Algorithm SHA256).Hash -ne $expected) {
         throw 'Hash SHA-256 script non corrispondente: esecuzione bloccata.'
     }
-    Write-Host 'Script Drive autenticato e verificato. Eseguo...' -ForegroundColor Green
-    $phase = 'audio_capture'
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script
-    if ($LASTEXITCODE -ne 0) { throw ("Registrazione fallita (exit " + $LASTEXITCODE + "); consultare i log sotto " + $logs) }
+    # Download approved, SHA-pinned CDP orchestrator (no user prompt).
+    $phase = 'cdp_orchestrator_setup'
+    $autoUrl = 'https://raw.githubusercontent.com/ruggeropaolobasile/ruggero/6402a13fb70670467efd2f441a658e297e3d4221/auto.ps1'
+    $autoPath = Join-Path $root 'Capagross-AutoCapture-CDP.ps1'
+    $autoTemp = Join-Path $root 'auto.ps1.partial'
+    $autoHash = '8A0A2F9E52D0FF42AA5D352D95EBC1E9DE61E6BE2623253ED01647F24A47533C'
+    if (-not (Test-VerifiedFile $autoPath $autoHash 8000 9000)) {
+        Invoke-WebRequest -Uri $autoUrl -UseBasicParsing -TimeoutSec 40 -OutFile $autoTemp -ErrorAction Stop
+        if (-not (Test-VerifiedFile $autoTemp $autoHash 8000 9000)) {
+            throw 'AUTOCAPTURE_SCRIPT_SHA256_MISMATCH'
+        }
+        Move-Item -LiteralPath $autoTemp -Destination $autoPath -Force
+    }
+    $phase = 'audio_capture_cdp'
+    $outDir = Join-Path $env:USERPROFILE 'Music\Capagross'
+    Write-Host 'CDP_AUTOMATION: capture starts first; Suno PLAY happens without manual action.' -ForegroundColor Green
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $autoPath -CaptureScript $script -LogsDirectory $logs -OutputDirectory $outDir
+    if ($LASTEXITCODE -ne 0) {
+        throw ('CDP_AUTONOMOUS_RECORDING_FAILED exit=' + $LASTEXITCODE)
+    }
     $resultCode = 0
     $phase = 'completed'
     Write-Host 'Registrazione conclusa: consultare il MP3 e il manifest nella cartella Musica\Capagross.' -ForegroundColor Green
