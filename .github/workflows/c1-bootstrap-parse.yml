@@ -18,6 +18,21 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
+      - name: Diagnose published raw auto.ps1 SHA256
+        shell: powershell
+        run: |
+          $bootstrap = Get-Content c.ps1 -Raw
+          $url = [regex]::Match($bootstrap, "\\$autoUrl = '([^']+)'").Groups[1].Value
+          $expected = [regex]::Match($bootstrap, "\\$autoHash = '([A-F0-9]+)'").Groups[1].Value
+          if (-not $url -or -not $expected) { throw 'Missing pinned helper URL or hash' }
+          $rawFile = Join-Path $env:TEMP 'capagross-raw-helper.ps1'
+          Invoke-WebRequest -Uri $url -UseBasicParsing -OutFile $rawFile -TimeoutSec 25 -ErrorAction Stop
+          $actual = (Get-FileHash $rawFile -Algorithm SHA256).Hash
+          Write-Host ("REMOTE_AUTO_SHA256=" + $actual)
+          Write-Host ("PINNED_AUTO_SHA256=" + $expected)
+          Write-Host ("REMOTE_AUTO_BYTES=" + (Get-Item $rawFile).Length)
+          Write-Host ("CHECKOUT_AUTO_SHA256=" + (Get-FileHash auto.ps1 -Algorithm SHA256).Hash)
+          Write-Host ("REMOTE_PIN_MATCH=" + ($actual -eq $expected))
       - name: Parse PowerShell 5.1 and verify local-sync entrypoints
         shell: powershell
         run: |
