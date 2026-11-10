@@ -136,6 +136,34 @@ jobs:
           $bootstrap = Get-Content -LiteralPath 'c.ps1' -Raw
           if (-not $bootstrap.Contains('AUTOCAPTURE_SCRIPT_SHA256_MISMATCH')) { throw 'Unverified helper download' }
           if (-not $bootstrap.Contains('CDP_AUTOMATION: capture starts first')) { throw 'Autonomous step not active' }
+          # Unit test the exact Get-SongTab function against the Windows 5.1 nested-array case.
+          $node = $ast.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-SongTab'
+          }, $true) | Select-Object -First 1
+          if (-not $node) { throw 'Get-SongTab function not found' }
+          . ([scriptblock]::Create($node.Extent.Text))
+          $cdpBase = 'http://127.0.0.1:9222'
+          $songId = '133f9e23-e0f3-4acf-b95b-934c37cb125c'
+          $goodTab = [pscustomobject]@{
+            type='page'
+            url=('https://suno.com/song/' + $songId)
+            webSocketDebuggerUrl='ws://127.0.0.1:9222/devtools/page/test'
+          }
+          $badTab = [pscustomobject]@{
+            type='page'
+            url='https://suno.com/song/unrelated'
+            webSocketDebuggerUrl='ws://127.0.0.1:9222/devtools/page/other'
+          }
+          function Invoke-RestMethod { return @($badTab, $goodTab) }
+          $found = Get-SongTab
+          if ($null -eq $found -or $found -is [array]) { throw 'CDP tabs were returned as an array' }
+          if ($found.url -ne $goodTab.url) { throw 'Wrong Suno tab returned' }
+          $wsUri = [System.Uri]::new([string]$found.webSocketDebuggerUrl)
+          if ($wsUri.Host -ne '127.0.0.1' -or $wsUri.Port -ne 9222) { throw 'Invalid CDP URI' }
+          Remove-Item Function:\Invoke-RestMethod -Force
+          Write-Host 'CDP-URI-SCALAR-REGRESSION-OK'
+          Write-Host ('AUTOCAPTURE-SHA256=' + (Get-FileHash -LiteralPath 'auto.ps1' -Algorithm SHA256).Hash)
           Write-Host 'CAPAGROSS-CDP-AUTO-PARSE-OK'
       - name: Integration test - failed run must publish full log to Drive
         shell: powershell
