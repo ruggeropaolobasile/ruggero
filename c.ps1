@@ -2,8 +2,8 @@
 # Drive export is SHA256-pinned. No secrets, admin, Codex or third-party downloader.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-$docId = '1hyIQiU8Z3MPOJJqOtV9sCLfc-m2rp78TA-P61toD9zs'
-$expected = '2CA89F4219809371024C4EF1043C4DAFCE38E6F411F8C1308DBCFFFB6CD49605'
+$docId = '1vamb69WAMoWMxxnowgs5sy5nllbDJ_z33Z2cFiufXOM'
+$expected = '4B2FAD34EB9CD4916E040774EB34E0F18392BBC7A1759B8E4E8B21FFE5E9BD35'
 $docDownload = "https://docs.google.com/document/d/$docId/export?format=txt"
 $root = Join-Path $env:LOCALAPPDATA 'CapagrossRX18'
 $logs = Join-Path $root 'logs'
@@ -64,17 +64,17 @@ function Get-SyncRoots {
     }
 }
 function Stage-SyncedFiles([string[]]$dirs) {
-    if (-not (Test-VerifiedFile $script $expected 8000 12000)) {
+    if (-not (Test-VerifiedFile $script $expected 8000 15000)) {
         foreach ($dir in $dirs) {
-            foreach ($name in @('Capagross-RX18-ONE-SHOT.ps1', 'Capagross-RX18-ONE-SHOT.ps1.txt')) {
+            foreach ($name in @('Capagross-RX18-ONE-SHOT.ps1', 'Capagross-RX18-ONE-SHOT.ps1.txt', 'Capagross RX18 - sorgente OneShot locale v3.txt')) {
                 $candidate = Join-Path $dir $name
-                if (Test-VerifiedFile $candidate $expected 8000 12000) {
+                if (Test-VerifiedFile $candidate $expected 8000 15000) {
                     Copy-Item -LiteralPath $candidate -Destination $script -Force
                     Write-Host ("Script sincronizzato verificato: " + $candidate) -ForegroundColor Green
                     break
                 }
             }
-            if (Test-VerifiedFile $script $expected 8000 12000) { break }
+            if (Test-VerifiedFile $script $expected 8000 15000) { break }
         }
     }
     if (-not (Test-VerifiedFile $bundleDest $bundleHash 45000000 50000000)) {
@@ -100,7 +100,7 @@ try {
     $transcript = $true
     Write-Host ("BOOTSTRAP RX18 - log: " + $log) -ForegroundColor Cyan
     $syncDirs = @(Get-SyncRoots)
-    Write-Host ("Sorgenti Drive/Dropbox locali disponibili: " + $syncDirs.Count) -ForegroundColor Cyan
+    Write-Host ("Cartelle Drive/Dropbox rilevate: " + $syncDirs.Count) -ForegroundColor Cyan
     Stage-SyncedFiles $syncDirs
     $verified = $false
     if (Test-Path $script -PathType Leaf) {
@@ -120,12 +120,12 @@ try {
         }
     }
     if (-not $verified) {
-        Write-Host 'Apro Drive nel browser per scaricare lo script di 8 KB...' -ForegroundColor Cyan
+        Write-Host 'Apro Drive nel browser per scaricare lo script dal Drive locale...' -ForegroundColor Cyan
         Start-Process $docDownload
         $deadline = (Get-Date).AddMinutes(3)
         while ((Get-Date) -lt $deadline -and -not $verified) {
             $candidates = @(Get-ChildItem -LiteralPath $downloads -File -Filter '*.txt' -ErrorAction SilentlyContinue |
-                Where-Object { $_.Length -gt 8000 -and $_.Length -lt 12000 -and $_.LastWriteTime -gt (Get-Date).AddMinutes(-10) } |
+                Where-Object { $_.Length -gt 8000 -and $_.Length -lt 15000 -and $_.LastWriteTime -gt (Get-Date).AddMinutes(-10) } |
                 Sort-Object LastWriteTime -Descending)
             foreach ($candidate in $candidates) {
                 if ((Get-FileHash -LiteralPath $candidate.FullName -Algorithm SHA256).Hash -eq $expected) {
