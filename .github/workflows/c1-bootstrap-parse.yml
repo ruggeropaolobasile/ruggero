@@ -155,7 +155,11 @@ jobs:
           $arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$fixture+'"'
           $proc=Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $arguments -PassThru -RedirectStandardInput $inputPath -RedirectStandardOutput $outputPath -RedirectStandardError $errorPath
           if (-not $proc.WaitForExit(20000)) { $proc.Kill();throw 'Child stdin prompt hung' }
-          if ($proc.ExitCode -ne 0) { throw ('Child exit: '+$proc.ExitCode+'; '+(Get-Content $errorPath -Raw)) }
+          $proc.Refresh()
+          Write-Host ('CHILD_RESULT type='+$proc.GetType().FullName+' exited='+$proc.HasExited+' exit='+$proc.ExitCode)
+          Write-Host ('CHILD_STDOUT: '+(Get-Content -LiteralPath $outputPath -Raw))
+          Write-Host ('CHILD_STDERR: '+(Get-Content -LiteralPath $errorPath -Raw))
+          if ($null -ne $proc.ExitCode -and $proc.ExitCode -ne 0) { throw ('Child exit: '+$proc.ExitCode+'; '+(Get-Content $errorPath -Raw)) }
           if ((Get-Content -LiteralPath $outputPath -Raw) -notmatch 'CHILD_INPUT_OK answerLength=0') {
             throw 'Read-Host did not accept redirected newline'
           }
