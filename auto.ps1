@@ -54,7 +54,8 @@ function Get-SongTab {
         }
     }
     if ($candidates.Count -eq 0) { return $null }
-    if ($candidates.Count -gt 1) { throw 'CDP_SUNO_TABS_AMBIGUOUS' }
+    # Browser may already contain this very song from an earlier attempt.
+    # All candidates have the same exact allowlisted song and loopback CDP; select one.
     return $candidates[0]
 }
 function Invoke-CDPOnSong([string]$expression, [string]$action = 'evaluate') {
@@ -105,8 +106,10 @@ if (-not (Test-Path -LiteralPath $OutputDirectory -PathType Container)) { New-It
 $runId = Get-Date -Format 'yyyyMMdd-HHmmss'
 $stdoutPath=Join-Path $LogsDirectory ('cdp-stdout-'+$runId+'.log')
 $stderrPath=Join-Path $LogsDirectory ('cdp-stderr-'+$runId+'.log')
-# Pre-open the exact song while not recording, avoiding loading delays and wrong tabs.
-Start-Process $songUrl
+# Open only when the same allowlisted song is not already present in Chrome CDP.
+$existingSongTab = $null
+try { $existingSongTab = Get-SongTab } catch {}
+if (-not $existingSongTab) { Start-Process $songUrl }
 $tabDeadline=(Get-Date).AddSeconds(35)
 $tabReady=$false
 while ((Get-Date) -lt $tabDeadline) {
