@@ -137,6 +137,29 @@ jobs:
           if (-not $bootstrap.Contains('AUTOCAPTURE_SCRIPT_SHA256_MISMATCH')) { throw 'Unverified helper download' }
           if (-not $bootstrap.Contains('CDP_AUTOMATION: capture starts first')) { throw 'Autonomous step not active' }
           Write-Host 'CAPAGROSS-CDP-AUTO-PARSE-OK'
+      - name: Verify child PowerShell noninteractive stdin and stdout redirection
+        shell: powershell
+        run: |
+          $root=Join-Path $env:TEMP ('CapagrossStdin-' + $PID)
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          $fixture=Join-Path $root 'child.ps1'
+          $inputPath=Join-Path $root 'stdin.txt'
+          $outputPath=Join-Path $root 'stdout.txt'
+          $errorPath=Join-Path $root 'stderr.txt'
+          Set-Content -LiteralPath $inputPath -Value '' -Encoding ASCII
+          Set-Content -LiteralPath $fixture -Value @'
+          $answer = Read-Host 'Ready to capture?'
+          Write-Host ('CHILD_INPUT_OK answerLength=' + $answer.Length)
+          exit 0
+          '@ -Encoding UTF8
+          $arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$fixture+'"'
+          $proc=Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $arguments -PassThru -RedirectStandardInput $inputPath -RedirectStandardOutput $outputPath -RedirectStandardError $errorPath
+          if (-not $proc.WaitForExit(20000)) { $proc.Kill();throw 'Child stdin prompt hung' }
+          if ($proc.ExitCode -ne 0) { throw ('Child exit: '+$proc.ExitCode+'; '+(Get-Content $errorPath -Raw)) }
+          if ((Get-Content -LiteralPath $outputPath -Raw) -notmatch 'CHILD_INPUT_OK answerLength=0') {
+            throw 'Read-Host did not accept redirected newline'
+          }
+          Write-Host 'CAPAGROSS-NO-PROMPT-CHILD-PASS'
       - name: Integration test - failed run must publish full log to Drive
         shell: powershell
         run: |
