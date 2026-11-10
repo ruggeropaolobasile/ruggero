@@ -229,10 +229,10 @@ try {
     }
     # Download approved, SHA-pinned CDP orchestrator (no user prompt).
     $phase = 'cdp_orchestrator_setup'
-    $autoUrl = 'https://raw.githubusercontent.com/ruggeropaolobasile/ruggero/6402a13fb70670467efd2f441a658e297e3d4221/auto.ps1'
+    $autoUrl = 'https://raw.githubusercontent.com/ruggeropaolobasile/ruggero/faac55425daf4cfa5ed6d60c624c3e55efff8aff/auto.ps1'
     $autoPath = Join-Path $root 'Capagross-AutoCapture-CDP.ps1'
     $autoTemp = Join-Path $root 'auto.ps1.partial'
-    $autoHash = '8A0A2F9E52D0FF42AA5D352D95EBC1E9DE61E6BE2623253ED01647F24A47533C'
+    $autoHash = 'CAC8931BA8ABA8D880AF82DF1C69E7C69D376BB597C8BB165020C90DAB1515BF'
     if (-not (Test-VerifiedFile $autoPath $autoHash 8000 9000)) {
         Invoke-WebRequest -Uri $autoUrl -UseBasicParsing -TimeoutSec 40 -OutFile $autoTemp -ErrorAction Stop
         if (-not (Test-VerifiedFile $autoTemp $autoHash 8000 9000)) {
@@ -242,8 +242,23 @@ try {
     }
     $phase = 'audio_capture_cdp'
     $outDir = Join-Path $env:USERPROFILE 'Music\Capagross'
+    if (-not (Test-VerifiedFile $bundleDest $bundleHash 45000000 50000000)) {
+        throw 'VERIFIED_RECORDER_ZIP_MISSING: cannot start unattended recording'
+    }
+    $packageDir = Join-Path $root 'package'
+    $exe = Join-Path $packageDir 'CapagrossRX18.exe'
+    if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+        New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
+        Expand-Archive -LiteralPath $bundleDest -DestinationPath $packageDir -Force
+    }
+    if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'RECORDER_EXE_MISSING_AFTER_EXTRACT' }
+    $doctorResult = (& $exe doctor 2>&1 | Out-String) | ConvertFrom-Json
+    if (-not $doctorResult.windows -or -not $doctorResult.ffmpeg -or
+        -not $doctorResult.pyaudiowpatch -or -not $doctorResult.loopback_available) {
+        throw 'RX18_AUDIO_DOCTOR_NOT_READY'
+    }
     Write-Host 'CDP_AUTOMATION: capture starts first; Suno PLAY happens without manual action.' -ForegroundColor Green
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $autoPath -CaptureScript $script -LogsDirectory $logs -OutputDirectory $outDir
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $autoPath -RecorderExe $exe -LogsDirectory $logs -OutputDirectory $outDir
     if ($LASTEXITCODE -ne 0) {
         throw ('CDP_AUTONOMOUS_RECORDING_FAILED exit=' + $LASTEXITCODE)
     }
