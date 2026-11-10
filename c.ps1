@@ -212,7 +212,7 @@ try {
     $autoUrl = 'https://raw.githubusercontent.com/ruggeropaolobasile/ruggero/e51e8c65c95d696b8c800613b1e2d3ef68b513e7/auto.ps1'
     $autoPath = Join-Path $root 'Capagross-AutoCapture-CDP.ps1'
     $autoTemp = Join-Path $root 'auto.ps1.partial'
-    $autoHash = '4D506D6E2B98268F1B6982AE92FEC4AE8E83220C16E5FC4BC3CB43901210579B'
+    $autoHash = 'CBE471EC2DF6BBA75D42D99C08FA0F6DB47A9887F4E45F5C02C7191DB4BCD350'
     if (-not (Test-VerifiedFile $autoPath $autoHash 9000 11000)) {
         Invoke-WebRequest -Uri $autoUrl -UseBasicParsing -TimeoutSec 40 -OutFile $autoTemp -ErrorAction Stop
         if (-not (Test-VerifiedFile $autoTemp $autoHash 9000 11000)) {
