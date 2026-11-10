@@ -273,7 +273,7 @@ try {
             try {
                 $syncTargets = @(Get-SyncedLogDirectories @(Get-SyncRoots))
                 if ($syncTargets.Count -gt 0) {
-                    $parts.Add(('Log sync recovered after failure: ' + ($syncTargets -join ', ')))
+                    Add-Content -LiteralPath $fullLog -Value ('Log sync recovered after failure: ' + ($syncTargets -join ', ')) -Encoding UTF8
                 }
             } catch {
                 Write-Warning ('Drive/Dropbox retry for logs failed: ' + $_.Exception.Message)
