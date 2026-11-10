@@ -38,12 +38,24 @@ function Send-CDPCommand([System.Net.WebSockets.ClientWebSocket]$socket, [int]$i
 }
 function Get-SongTab {
     $response = @(Invoke-RestMethod -Uri ($cdpBase + '/json/list') -TimeoutSec 8 -ErrorAction Stop)
-    $tabs = @($response | Where-Object {
-        $_.type -eq 'page' -and $_.url -match ('^https://suno[.]com/song/' + [Regex]::Escape($songId) + '([?]|$)') -and
-        $_.webSocketDebuggerUrl -match '^ws://(127[.]0[.]0[.]1|localhost):9222/devtools/page/'
-    })
-    if ($tabs.Count -eq 0) { return $null }
-    return $tabs[0]
+    # PowerShell 5.1 can expose nested arrays from ConvertFrom-Json/Invoke-RestMethod.
+    # Flatten explicitly: property projection on arrays yields Object[] instead of Uri.
+    $candidates = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($entry in $response) {
+        foreach ($tab in @($entry)) {
+            if ($null -eq $tab -or $tab -isnot [pscustomobject]) { continue }
+            $tabUrl = [string]$tab.url
+            $wsUrl = [string]$tab.webSocketDebuggerUrl
+            if ($tab.type -eq 'page' -and
+                $tabUrl -match ('^https://suno[.]com/song/' + [Regex]::Escape($songId) + '([?]|$)') -and
+                $wsUrl -match '^ws://(127[.]0[.]0[.]1|localhost):9222/devtools/page/') {
+                $candidates.Add([pscustomobject]@{url=$tabUrl;webSocketDebuggerUrl=$wsUrl})
+            }
+        }
+    }
+    if ($candidates.Count -eq 0) { return $null }
+    if ($candidates.Count -gt 1) { throw 'CDP_SUNO_TABS_AMBIGUOUS' }
+    return $candidates[0]
 }
 function Invoke-CDPOnSong([string]$expression, [string]$action = 'evaluate') {
     $tab = Get-SongTab
@@ -51,7 +63,10 @@ function Invoke-CDPOnSong([string]$expression, [string]$action = 'evaluate') {
     $socket = New-Object Net.WebSockets.ClientWebSocket
     try {
         $cts = New-Object Threading.CancellationTokenSource(12000)
-        try { $socket.ConnectAsync([Uri]$tab.webSocketDebuggerUrl, $cts.Token).GetAwaiter().GetResult() }
+        $wsString = [string]$tab.webSocketDebuggerUrl
+        if ($wsString -notmatch '^ws://(127[.]0[.]0[.]1|localhost):9222/devtools/page/') { throw 'CDP_TARGET_NOT_LOOPBACK' }
+        $wsUri = [System.Uri]::new($wsString)
+        try { $socket.ConnectAsync($wsUri, $cts.Token).GetAwaiter().GetResult() }
         finally { $cts.Dispose() }
         $result = Send-CDPCommand $socket 1 'Runtime.evaluate' @{expression=$expression;returnByValue=$true;awaitPromise=$false}
         $value = $result.result.value
