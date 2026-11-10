@@ -22,8 +22,10 @@ jobs:
         shell: powershell
         run: |
           $bootstrap = Get-Content c.ps1 -Raw
-          $url = [regex]::Match($bootstrap, "\\$autoUrl = '([^']+)'").Groups[1].Value
-          $expected = [regex]::Match($bootstrap, "\\$autoHash = '([A-F0-9]+)'").Groups[1].Value
+          $urlLine = $bootstrap.Split([char]10) | Where-Object { $_.Contains('$autoUrl = ') } | Select-Object -First 1
+          $hashLine = $bootstrap.Split([char]10) | Where-Object { $_.Contains('$autoHash = ') } | Select-Object -First 1
+          $url = ($urlLine -split "'")[1]
+          $expected = ($hashLine -split "'")[1]
           if (-not $url -or -not $expected) { throw 'Missing pinned helper URL or hash' }
           $rawFile = Join-Path $env:TEMP 'capagross-raw-helper.ps1'
           Invoke-WebRequest -Uri $url -UseBasicParsing -OutFile $rawFile -TimeoutSec 25 -ErrorAction Stop
