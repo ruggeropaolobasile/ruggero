@@ -268,6 +268,17 @@ try {
             $parts.Add($errorDetail)
         }
         [System.IO.File]::WriteAllText($fullLog, [string]::Join([Environment]::NewLine, $parts.ToArray()), [System.Text.Encoding]::UTF8)
+        # If discovery failed early, retry at exit to avoid losing a failed-run log.
+        if ($syncTargets.Count -eq 0) {
+            try {
+                $syncTargets = @(Get-SyncedLogDirectories @(Get-SyncRoots))
+                if ($syncTargets.Count -gt 0) {
+                    $parts.Add(('Log sync recovered after failure: ' + ($syncTargets -join ', ')))
+                }
+            } catch {
+                Write-Warning ('Drive/Dropbox retry for logs failed: ' + $_.Exception.Message)
+            }
+        }
         $status = [ordered]@{
             runId = $runId
             status = $(if ($resultCode -eq 0) { 'success' } else { 'failed' })
