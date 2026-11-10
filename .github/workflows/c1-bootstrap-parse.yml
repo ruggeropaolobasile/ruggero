@@ -36,6 +36,10 @@ jobs:
           Write-Host ("CHECKOUT_AUTO_SHA256=" + (Get-FileHash auto.ps1 -Algorithm SHA256).Hash)
           Write-Host ("REMOTE_PIN_MATCH=" + ($actual -eq $expected))
           if ($actual -ne $expected) { throw 'Raw GitHub helper SHA256 differs from pinned bootstrap hash' }
+          $candidate = Join-Path $env:TEMP 'capagross-fixed-spa-helper.ps1'
+          Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/ruggeropaolobasile/ruggero/6bbfbd85cae5672d37e9a00bb3c503a6c8f2a52f/auto.ps1' -UseBasicParsing -OutFile $candidate -TimeoutSec 25 -ErrorAction Stop
+          Write-Host ('FIXED_SPA_RAW_SHA256=' + (Get-FileHash $candidate -Algorithm SHA256).Hash)
+          Write-Host ('FIXED_SPA_RAW_BYTES=' + (Get-Item $candidate).Length)
       - name: Parse PowerShell 5.1 and verify local-sync entrypoints
         shell: powershell
         run: |
