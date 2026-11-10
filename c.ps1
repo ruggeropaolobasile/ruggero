@@ -209,13 +209,13 @@ try {
     }
     # Download approved, SHA-pinned CDP orchestrator (no user prompt).
     $phase = 'cdp_orchestrator_setup'
-    $autoUrl = 'https://raw.githubusercontent.com/ruggeropaolobasile/ruggero/faac55425daf4cfa5ed6d60c624c3e55efff8aff/auto.ps1'
+    $autoUrl = 'https://raw.githubusercontent.com/ruggeropaolobasile/ruggero/994e2d87375d31ad5aa27af53647fa173b78778e/auto.ps1'
     $autoPath = Join-Path $root 'Capagross-AutoCapture-CDP.ps1'
     $autoTemp = Join-Path $root 'auto.ps1.partial'
-    $autoHash = 'CAC8931BA8ABA8D880AF82DF1C69E7C69D376BB597C8BB165020C90DAB1515BF'
-    if (-not (Test-VerifiedFile $autoPath $autoHash 8000 9000)) {
+    $autoHash = 'E99C733BF57F4A16725DC0925551645EAF538D49DBF402B5386BEB8DB77DF96B'
+    if (-not (Test-VerifiedFile $autoPath $autoHash 9000 11000)) {
         Invoke-WebRequest -Uri $autoUrl -UseBasicParsing -TimeoutSec 40 -OutFile $autoTemp -ErrorAction Stop
-        if (-not (Test-VerifiedFile $autoTemp $autoHash 8000 9000)) {
+        if (-not (Test-VerifiedFile $autoTemp $autoHash 9000 11000)) {
             throw 'AUTOCAPTURE_SCRIPT_SHA256_MISMATCH'
         }
         Move-Item -LiteralPath $autoTemp -Destination $autoPath -Force
